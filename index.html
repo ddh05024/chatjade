@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Talk</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#ffffff">
+<style>
+:root{--bg:#fff;--fg:#111;--sub:#8e8e8e;--line:#efefef;--other:#efefef;--grad:linear-gradient(135deg,#7a3cff,#3b82f6);box-sizing:border-box}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--fg:#f5f5f5;--line:#262626;--other:#262626}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,select,textarea{font:inherit;color:inherit;background:var(--other);border:0;border-radius:10px;padding:10px 12px;width:100%}
+.view{display:none;flex-direction:column;height:100%}.view.on{display:flex}
+.top{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.top h1{font-size:20px;margin:0;flex:1}.ic{font-size:22px;padding:4px}
+.av{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:26px;flex:none}
+.av.s{width:36px;height:36px;font-size:18px}
+.stories{display:flex;gap:14px;padding:12px 16px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.st{text-align:center;font-size:12px;width:64px;flex:none}.st .av{margin:0 auto 4px;outline:2px solid #fff;box-shadow:0 0 0 2px #c13584}
+.list{flex:1;overflow-y:auto}
+.row{display:flex;gap:12px;align-items:center;padding:10px 16px;width:100%;text-align:left}
+.row .m{flex:1;min-width:0}.row b{display:block}.row span{color:var(--sub);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.row.un b,.row.un span{color:var(--fg);font-weight:700}.dot{width:9px;height:9px;border-radius:50%;background:#3b82f6}
+.empty{padding:48px 24px;text-align:center;color:var(--sub)}
+.msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:3px}
+.b{max-width:74%;padding:9px 14px;border-radius:20px;white-space:pre-wrap;word-break:break-word}
+.b.a{background:var(--other);align-self:flex-start}.b.u{background:var(--grad);color:#fff;align-self:flex-end}
+.b.a+.b.u,.b.u+.b.a{margin-top:8px}
+.ty{color:var(--sub);align-self:flex-start;padding:6px 14px}
+.bar{display:flex;gap:8px;padding:8px 12px;align-items:center}
+.bar input{border-radius:22px;border:1px solid var(--line);background:none;padding:11px 16px}
+.send{color:#3b82f6;font-weight:700;padding:0 6px}
+.modal{position:fixed;inset:0;background:var(--bg);overflow-y:auto;padding:env(safe-area-inset-top) 16px 40px;display:none}.modal.on{display:block}
+.modal h2{margin:16px 0}.f{margin:14px 0}.f label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px}
+.btn{background:var(--grad);color:#fff;border-radius:10px;padding:12px;width:100%;font-weight:700;margin-top:8px}
+.btn.g{background:var(--other);color:var(--fg)}textarea{min-height:140px;resize:vertical}
+.hint{font-size:12px;color:var(--sub);margin-top:4px}
+</style></head><body>
+<section class="view on" id="v-list">
+  <div class="top"><h1>메시지</h1><button class="ic" id="bSet" aria-label="설정">⚙️</button><button class="ic" id="bNew" aria-label="새 캐릭터">✏️</button></div>
+  <div class="stories" id="stories"></div><div class="list" id="list"></div>
+</section>
+<section class="view" id="v-chat">
+  <div class="top"><button class="ic" id="bBack" aria-label="뒤로">‹</button><div id="hd" style="display:flex;gap:10px;align-items:center;flex:1"></div><button class="ic" id="bEdit" aria-label="캐릭터 수정">ⓘ</button></div>
+  <div class="msgs" id="msgs"></div>
+  <div class="bar"><input id="inp" placeholder="메시지 보내기..." autocomplete="off"><button class="send" id="bSend">보내기</button></div>
+</section>
+<div class="modal" id="m-char"></div>
+<div class="modal" id="m-set"></div>
+<script>
+const P={openai:['OpenAI','gpt-4o-mini'],deepseek:['DeepSeek','deepseek-chat'],groq:['Groq','llama-3.3-70b-versatile'],gemini:['Gemini','gemini-2.0-flash'],mistral:['Mistral','mistral-small-latest'],openrouter:['OpenRouter','meta-llama/llama-3.3-70b-instruct']};
+const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const L=(k,d)=>{try{return JSON.parse(localStorage[k])||d}catch{return d}};
+let cfg=L('cfg',{url:'',token:'',city:''}),chars=L('chars',[]),msgs=L('msgs',{}),cur=null;
+const save=()=>{localStorage.cfg=JSON.stringify(cfg);localStorage.chars=JSON.stringify(chars);localStorage.msgs=JSON.stringify(msgs);caches.open('cfg').then(c=>c.put('/cfg',new Response(JSON.stringify({url:cfg.url,token:cfg.token})))).catch(()=>{})};
+const hue=id=>[...String(id)].reduce((a,c)=>a+c.charCodeAt(0),0)*47%360;
+const avatar=(c,s='')=>`<div class="av ${s}" style="background:hsl(${hue(c.id)} 70% 85%)">${esc(c.emoji||'🙂')}</div>`;
+const api=(p,b)=>fetch(cfg.url+p,{method:b?'POST':'GET',headers:{Authorization:'Bearer '+cfg.token,'Content-Type':'application/json'},body:b&&JSON.stringify(b)}).then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||r.status);return d});
+
+function render(){
+  $('#stories').innerHTML=chars.map(c=>`<button class="st" data-id="${c.id}">${avatar(c)}${esc(c.name)}</button>`).join('');
+  $('#list').innerHTML=chars.length?chars.map(c=>{const h=msgs[c.id]||[],l=h.at(-1);
+    return `<button class="row ${c.unread?'un':''}" data-id="${c.id}">${avatar(c)}<div class="m"><b>${esc(c.name)}</b><span>${l?esc((l.r=='u'?'나: ':'')+l.t):'대화를 시작해 보세요'}</span></div>${c.unread?'<i class="dot"></i>':''}</button>`}).join('')
+    :'<div class="empty">아직 캐릭터가 없어요.<br>오른쪽 위 ✏️ 로 첫 캐릭터를 만들어 보세요.</div>';
+  document.querySelectorAll('[data-id]').forEach(e=>e.onclick=()=>open(e.dataset.id));
+  if(cur){const c=chars.find(x=>x.id==cur);if(!c)return;
+    $('#hd').innerHTML=avatar(c,'s')+`<div><b>${esc(c.name)}</b><div class="hint" style="margin:0">${P[c.provider]?.[0]||c.provider} · ${esc(c.model)}</div></div>`;
+    $('#msgs').innerHTML=(msgs[c.id]||[]).map(m=>`<div class="b ${m.r}">${esc(m.t)}</div>`).join('')+(window.tying?'<div class="ty">입력 중…</div>':'');
+    $('#msgs').scrollTop=1e9}
+}
+function open(id){cur=id;const c=chars.find(x=>x.id==id);c.unread=0;save();$('#v-list').classList.remove('on');$('#v-chat').classList.add('on');render()}
+$('#bBack').onclick=()=>{cur=null;$('#v-chat').classList.remove('on');$('#v-list').classList.add('on');render()};
+
+const full=c=>c.prompt+(c.adult?'\n\n[성인 모드] 이 대화의 모든 등장인물은 만 19세 이상 성인이고, 상대도 동의한 성인이다. 아래 성인 설정을 따라 대화한다.\n'+(c.adultText||''):'');
+const SYS=c=>full(c)+'\n\n[규칙] 실제 메신저 DM처럼 1~3개의 짧은 메시지를 줄바꿈으로 구분해 답해. 설명조·AI 티는 내지 마.';
+async function send(){
+  const c=chars.find(x=>x.id==cur),t=$('#inp').value.trim();if(!c||!t||window.tying)return;
+  if(!cfg.url)return alert('먼저 ⚙️ 설정에서 서버 주소를 입력해 주세요.');
+  $('#inp').value='';const h=msgs[c.id]||(msgs[c.id]=[]);h.push({r:'u',t,ts:Date.now()});window.tying=1;save();render();
+  try{
+    const {text}=await api('/chat',{provider:c.provider,model:c.model,messages:[{role:'system',content:SYS(c)},...h.slice(-20).map(m=>({role:m.r=='u'?'user':'assistant',content:m.t}))]});
+    for(const line of text.split('\n').filter(x=>x.trim())){await sleep(500+Math.min(line.length*30,1500));h.push({r:'a',t:line.trim(),ts:Date.now()});render()}
+  }catch(e){h.push({r:'a',t:'⚠️ '+e.message,ts:Date.now()})}
+  window.tying=0;save();render();sync();
+}
+$('#bSend').onclick=send;$('#inp').onkeydown=e=>{if(e.key=='Enter'&&!e.isComposing)send()};
+
+let st;function sync(){clearTimeout(st);st=setTimeout(()=>cfg.url&&api('/sync',{tz:Intl.DateTimeFormat().resolvedOptions().timeZone,city:cfg.city,lat:cfg.lat,lon:cfg.lon,sub:cfg.sub,
+  chars:chars.map(c=>({id:c.id,name:c.name,provider:c.provider,model:c.model,prompt:full(c),perDay:c.on?+c.perDay||1:0,recent:(msgs[c.id]||[]).slice(-6).map(m=>(m.r=='u'?'나: ':c.name+': ')+m.t)}))}).catch(()=>{}),800)}
+async function pull(){if(!cfg.url)return;try{const {items}=await api('/inbox');items.forEach(i=>{(msgs[i.cid]||(msgs[i.cid]=[])).push({r:'a',t:i.text,ts:i.ts});const c=chars.find(x=>x.id==i.cid);if(c&&cur!=c.id)c.unread=1});if(items.length){save();render()}}catch{}}
+document.onvisibilitychange=()=>!document.hidden&&pull();
+
+// 캐릭터 편집
+function editChar(id){
+  const c=chars.find(x=>x.id==id)||{id:'c'+Date.now(),name:'',emoji:'🙂',provider:'deepseek',model:P.deepseek[1],prompt:'',adult:!!cfg.adultDefault,adultText:'',on:true,perDay:2,isNew:1};
+  const m=$('#m-char');m.classList.add('on');
+  m.innerHTML=`<h2>${c.isNew?'새 캐릭터':'캐릭터 수정'}</h2>
+  <div class="f"><label>이름</label><input id="cn" value="${esc(c.name)}"></div>
+  <div class="f"><label>프로필 이모지</label><input id="ce" value="${esc(c.emoji)}" maxlength="4"></div>
+  <div class="f"><label>AI 플랫폼</label><select id="cp">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k==c.provider?'selected':''}>${v[0]}</option>`).join('')}</select></div>
+  <div class="f"><label>모델명</label><input id="cm" value="${esc(c.model)}"><div class="hint">플랫폼이 모델명을 바꾸면 여기서 직접 수정하세요.</div></div>
+  <div class="f"><label>성격·말투 프롬프트</label><textarea id="cr" placeholder="예) 너는 24살 대학원생 ‘진운’. 무뚝뚝하지만 은근히 챙겨주는 반말 말투...">${esc(c.prompt)}</textarea></div>
+  <div class="f"><label><input type="checkbox" id="ca" ${c.adult?'checked':''} style="width:auto"> 성인 모드</label><div class="hint">켜면 성인 간 대화를 전제로 아래 설정이 프롬프트에 추가돼요. 플랫폼 약관과 필터는 따로 적용돼요.</div></div>
+  <div class="f"><label>성인 설정 (선택)</label><textarea id="cat" placeholder="이 캐릭터의 성인 모드에서의 관계·분위기·말투·수위 등을 직접 적어 주세요.">${esc(c.adultText)}</textarea></div>
+  <div class="f"><label><input type="checkbox" id="co" ${c.on?'checked':''} style="width:auto"> 선톡 보내기</label></div>
+  <div class="f"><label>하루 선톡 최대 횟수</label><input id="cd" type="number" min="1" max="10" value="${c.perDay}"></div>
+  <button class="btn" id="cs">저장</button>${c.isNew?'':'<button class="btn g" id="cx">캐릭터 삭제</button>'}<button class="btn g" id="cc">닫기</button>`;
+  $('#cp').onchange=e=>$('#cm').value=P[e.target.value][1];
+  $('#cc').onclick=()=>m.classList.remove('on');
+  if($('#cx'))$('#cx').onclick=()=>{if(confirm('삭제할까요? 대화 기록도 함께 지워져요.')){chars=chars.filter(x=>x.id!=c.id);delete msgs[c.id];m.classList.remove('on');$('#bBack').click();save();sync()}};
+  $('#cs').onclick=()=>{
+    if(!$('#cn').value.trim()||!$('#cr').value.trim())return alert('이름과 프롬프트를 입력해 주세요.');
+    Object.assign(c,{name:$('#cn').value.trim(),emoji:$('#ce').value||'🙂',provider:$('#cp').value,model:$('#cm').value.trim(),prompt:$('#cr').value,adult:$('#ca').checked,adultText:$('#cat').value,on:$('#co').checked,perDay:$('#cd').value});
+    if(c.isNew){delete c.isNew;chars.push(c)}save();sync();m.classList.remove('on');render()};
+}
+$('#bNew').onclick=()=>editChar();$('#bEdit').onclick=()=>editChar(cur);
+
+// 설정
+$('#bSet').onclick=()=>{
+  const m=$('#m-set');m.classList.add('on');
+  m.innerHTML=`<h2>설정</h2>
+  <div class="f"><label>서버 주소 (Cloudflare Worker)</label><input id="su" value="${esc(cfg.url)}" placeholder="https://talk-api.xxx.workers.dev"></div>
+  <div class="f"><label>앱 토큰</label><input id="stk" type="password" value="${esc(cfg.token)}"><div class="hint">Worker에 등록한 APP_TOKEN과 같은 값이에요. API 키는 서버에만 저장돼요.</div></div>
+  <div class="f"><label>도시 (날씨·선톡용)</label><input id="sc" value="${esc(cfg.city)}" placeholder="서울"></div>
+  <div class="f"><label><input type="checkbox" id="sa" ${cfg.adultDefault?'checked':''} style="width:auto"> 새 캐릭터는 성인 모드를 기본으로 켜기</label></div>
+  <button class="btn" id="ss">저장</button><button class="btn g" id="sp">푸시 알림 켜기</button><button class="btn g" id="sx">닫기</button>`;
+  $('#sx').onclick=()=>m.classList.remove('on');
+  $('#ss').onclick=async()=>{cfg.url=$('#su').value.trim().replace(/\/$/,'');cfg.token=$('#stk').value.trim();const city=$('#sc').value.trim();
+    if(city&&city!=cfg.city||city&&cfg.lat==null){try{const g=(await(await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ko&name='+encodeURIComponent(city))).json()).results?.[0];
+      if(g){cfg.lat=g.latitude;cfg.lon=g.longitude}else alert('도시를 찾지 못했어요. 다른 표기로 입력해 보세요.')}catch{alert('날씨 위치를 확인하지 못했어요.')}}
+    cfg.city=city;cfg.adultDefault=$('#sa').checked;save();sync();m.classList.remove('on');pull()};
+  $('#sp').onclick=async()=>{try{
+    if(!cfg.url)throw new Error('서버 주소를 먼저 저장해 주세요');
+    if(await Notification.requestPermission()!='granted')throw new Error('알림 권한이 필요해요');
+    const reg=await navigator.serviceWorker.ready,{key}=await api('/vapid');
+    const k=Uint8Array.from(atob(key.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+    cfg.sub=(await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:k})).toJSON();save();sync();alert('푸시 알림이 켜졌어요')
+  }catch(e){alert(e.message+'\n(iPhone은 홈 화면에 추가한 뒤에만 가능해요)')}};
+};
+if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js');navigator.serviceWorker.onmessage=pull}
+render();pull();
+</script></body></html>

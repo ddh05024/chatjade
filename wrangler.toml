@@ -1,0 +1,8 @@
+name = "jade"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+[triggers]
+crons = ["0 * * * *"]
+[[kv_namespaces]]
+binding = "KV"
+id = "1d00905388f240d6a279d57cbdc41fc8"

@@ -119,7 +119,7 @@ $('#bNew').onclick=()=>editChar();$('#bEdit').onclick=()=>editChar(cur);
 $('#bSet').onclick=()=>{
   const m=$('#m-set');m.classList.add('on');
   m.innerHTML=`<h2>설정</h2>
-  <div class="f"><label>서버 주소 (Cloudflare Worker)</label><input id="su" value="${esc(cfg.url)}" placeholder="https://talk-api.xxx.workers.dev"></div>
+  <div class="f"><label>서버 주소 (Cloudflare Worker)</label><input id="su" value="${esc(cfg.url)}" placeholder="https://chatjade.plmn15.workers.dev/"></div>
   <div class="f"><label>앱 토큰</label><input id="stk" type="password" value="${esc(cfg.token)}"><div class="hint">Worker에 등록한 APP_TOKEN과 같은 값이에요. API 키는 서버에만 저장돼요.</div></div>
   <div class="f"><label>도시 (날씨·선톡용)</label><input id="sc" value="${esc(cfg.city)}" placeholder="서울"></div>
   <div class="f"><label><input type="checkbox" id="sa" ${cfg.adultDefault?'checked':''} style="width:auto"> 새 캐릭터는 성인 모드를 기본으로 켜기</label></div>
